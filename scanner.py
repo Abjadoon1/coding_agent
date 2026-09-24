@@ -1,6 +1,8 @@
 import os
-from pathlib import Path
 import ast
+from pathlib import Path
+from pydantic import BaseModel, Field
+from typing import Literal
 
 IGNORE_DIRS = {
     ".git",
@@ -25,6 +27,12 @@ valid_files = {
     ".gitignore",
     ".dockerignore",
 }
+
+
+class RepoSearch(BaseModel):
+    repo_paths: list[dict] = Field(default_factory=list)
+    search_type: Literal["imports", "classes", "functions"]
+    keyword: str
 
 
 def scan_repo(repo_path):
@@ -58,15 +66,25 @@ def read_file(file_path):
         classes = []
         imports = []
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
-                functions.append(node.name)
-            elif isinstance(node, ast.ClassDef):
-                classes.append(node.name)
+            if isinstance(node, ast.ImportFrom):
+                imports.append(node.module)
             elif isinstance(node, ast.Import):
                 for name in node.names:
                     imports.append(name.name)
-            elif isinstance(node, ast.ImportFrom):
-                imports.append(node.module)
+            elif isinstance(node, ast.ClassDef):
+                class_detail = {
+                    "name": node.name,
+                    "line_start": node.lineno,
+                    "line_end": node.end_lineno,
+                }
+                classes.append(class_detail)
+            elif isinstance(node, ast.FunctionDef):
+                function_detail = {
+                    "name": node.name,
+                    "line_start": node.lineno,
+                    "line_end": node.end_lineno,
+                }
+                functions.append(function_detail)
 
     return {
         "path": Path(file_path),
@@ -87,25 +105,58 @@ def build_repo_index(repo_path):
     return file_codes
 
 
-def find_function(repo_index, function_name):
-    for repo in repo_index:
-        if function_name in repo["functions"]:
+def search_repo(search: RepoSearch):
+    for repo in search.repo_paths:
+        if search.search_type == "imports":
+            names = repo["imports"]
+        else:
+            names = [item["name"] for item in repo[search.search_type]]
+        if search.keyword in names:
             return repo["path"]
     return None
 
 
-def find_class(repo_index, class_name):
-    for repo in repo_index:
-        if class_name in repo["classes"]:
-            return repo["path"]
-    return None
+def search_text(repo_files, keyword):
+    results = []
+    for repo_file in repo_files:
+        with open(repo_file, "r") as file:
+            for index, line in enumerate(file, start=1):
+                clean_line = line.strip()
+                if keyword in clean_line:
+                    results.append(
+                        {
+                            "path": repo_file,
+                            "line": index,
+                            "text": clean_line,
+                        }
+                    )
+
+    return results
 
 
-def find_import(repo_index, import_name):
-    for repo in repo_index:
-        if import_name in repo["imports"]:
-            return repo["path"]
-    return None
+repo_path = "/opt/anaconda3/envs/coding_agent/Project/"
 
+repo_files = scan_repo(repo_path)
+repo_index = build_repo_index(repo_path)
+search_function = RepoSearch(
+    repo_paths=repo_index,
+    search_type="functions",
+    keyword="search_text",
+)
 
-print(build_repo_index("/opt/anaconda3/envs/coding_agent/Project/"))
+search_class = RepoSearch(
+    repo_paths=repo_index,
+    search_type="classes",
+    keyword="RepoSearch",
+)
+
+search_import = RepoSearch(
+    repo_paths=repo_index,
+    search_type="imports",
+    keyword="ast",
+)
+
+print(search_repo(search_function))
+print(search_repo(search_class))
+print(search_repo(search_import))
+print(search_text(repo_files, "ast"))
