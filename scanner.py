@@ -94,9 +94,9 @@ def read_file(file_path):
     }
 
 
-def build_repo_index(repo_path):
+def build_repo_index(repo_files):
     file_codes = []
-    repo_files = scan_repo(repo_path)
+
     code_files = [file for file in repo_files if file.suffix == ".py"]
     for file in code_files:
         code_details = read_file(file)
@@ -134,29 +134,64 @@ def search_text(repo_files, keyword):
     return results
 
 
-repo_path = "/opt/anaconda3/envs/coding_agent/Project/"
+def build_module_map(repo_path, repo_files):
+    project_modules = {
+        ".".join(file_path.relative_to(repo_path).with_suffix("").parts): file_path
+        for file_path in repo_files
+        if file_path.suffix == ".py"
+    }
 
-repo_files = scan_repo(repo_path)
-repo_index = build_repo_index(repo_path)
-search_function = RepoSearch(
-    repo_paths=repo_index,
-    search_type="functions",
-    keyword="search_text",
-)
+    return project_modules
 
-search_class = RepoSearch(
-    repo_paths=repo_index,
-    search_type="classes",
-    keyword="RepoSearch",
-)
 
-search_import = RepoSearch(
-    repo_paths=repo_index,
-    search_type="imports",
-    keyword="ast",
-)
+def build_dependency_map(repo_index, module_map):
+    dependency_map = {}
+    for repo_details in repo_index:
+        dependencies = []
+        for import_name in repo_details["imports"]:
+            if import_name in module_map:
+                dependencies.append(module_map[import_name])
+        dependency_map[repo_details["path"]] = dependencies
 
-print(search_repo(search_function))
-print(search_repo(search_class))
-print(search_repo(search_import))
-print(search_text(repo_files, "ast"))
+    return dependency_map
+
+
+def build_relationship_graph(repo_path):
+    repo_files = scan_repo(repo_path)
+    repo_index = build_repo_index(repo_files)
+    module_map = build_module_map(repo_path, repo_files)
+    dependency_map = build_dependency_map(repo_index, module_map)
+
+    relationship_graph = []
+
+    for repo_details in repo_index:
+        current_file = repo_details["path"]
+        used_by = []
+
+        for file_path, dependencies in dependency_map.items():
+            if current_file in dependencies:
+                used_by.append(file_path)
+
+        file_details = {
+            "path": current_file,
+            "functions": repo_details["functions"],
+            "classes": repo_details["classes"],
+            "internal_dependencies": dependency_map[current_file],
+            "used_by": used_by,
+        }
+
+        relationship_graph.append(file_details)
+
+    return relationship_graph
+
+
+repo_path = ""
+
+relationship_graph = build_relationship_graph(repo_path)
+
+for file in relationship_graph:
+    print("\nFILE:", file["path"])
+    print("FUNCTIONS:", file["functions"])
+    print("CLASSES:", file["classes"])
+    print("DEPENDS ON:", file["internal_dependencies"])
+    print("USED BY:", file["used_by"])
