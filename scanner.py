@@ -79,13 +79,19 @@ def read_file(file_path):
                 }
                 classes.append(class_detail)
             elif isinstance(node, ast.FunctionDef):
-                function_detail = {
+                function_details = {
                     "name": node.name,
                     "line_start": node.lineno,
                     "line_end": node.end_lineno,
                 }
-                functions.append(function_detail)
-
+                functions.append(function_details)
+            elif isinstance(node, ast.AsyncFunctionDef):
+                async_function_details = {
+                    "name": node.name,
+                    "line_start": node.lineno,
+                    "line_end": node.end_lineno,
+                }
+                functions.append(async_function_details)
     return {
         "path": Path(file_path),
         "imports": imports,
@@ -185,13 +191,6 @@ def build_relationship_graph(repo_path):
     return relationship_graph
 
 
-repo_path = ""
+repo_path = "/opt/anaconda3/envs/research_agent/projects"
 
 relationship_graph = build_relationship_graph(repo_path)
-
-for file in relationship_graph:
-    print("\nFILE:", file["path"])
-    print("FUNCTIONS:", file["functions"])
-    print("CLASSES:", file["classes"])
-    print("DEPENDS ON:", file["internal_dependencies"])
-    print("USED BY:", file["used_by"])
